@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'backend.users'
 ]
 
 MIDDLEWARE = [
@@ -75,8 +76,12 @@ WSGI_APPLICATION = 'lol.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',  # PostgreSQL 엔진 사용
+        'NAME': 'lol',  # 앞서 생성한 데이터베이스 이름
+        'USER': 'postgres',  # PostgreSQL 사용자 이름
+        'PASSWORD': 'tmvlzj12',  # PostgreSQL 사용자 비밀번호
+        'HOST': 'localhost',  # 로컬에서 실행하는 경우 localhost
+        'PORT': '5432',  # 기본 PostgreSQL 포트
     }
 }
 
@@ -105,7 +110,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Seoul'  # 서울 시간대
 
 USE_I18N = True
 
