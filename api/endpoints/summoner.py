@@ -15,26 +15,6 @@ BASE_URL = os.getenv("BASE_URL")
 RIOT_TEST_KEY = os.getenv("RIOT_TEST_KEY")
 GET_PUUID_URL = os.getenv("GET_PUUID_URL")
 
-@router.get("/")
-def get_my_summoner():
-    url = f"{BASE_URL}/lol/summoner/v4/summoners/me"
-    headers = {
-        "X-Riot-Token": RIOT_TEST_KEY
-    }
-
-    # 요청 보내기
-    response = requests.get(url, headers=headers)
-    print(response.text)
-
-    if response.status_code == 403:
-        raise HTTPException(status_code=403, detail="API 키가 만료되었거나 권한이 없습니다.")
-    elif response.status_code != 200:
-        raise HTTPException(
-            status_code=response.status_code, detail="소환사 정보를 가져올 수 없습니다."
-        )
-
-    return response.json()
-
 
 @router.get("/get-user")
 def get_user_tier(
@@ -91,4 +71,81 @@ def get_user_tier(
         "data": {
             "id": new_user.id,
         }
+    }
+
+
+@router.get("/get-winning-rate")
+def get_user_win_rate(
+    user_id: int = Query(..., description="유저의 user_id를 입력하세요")
+):
+    # user_id로 유저 정보 찾기
+    user = User.objects.filter(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다")
+
+    # user의 unique_id를 이용해 승/패 정보 가져오기
+    league_url = f"https://kr.api.riotgames.com/lol/league/v4/entries/by-summoner/{user.unique_id}"
+    headers = {"X-Riot-Token": RIOT_TEST_KEY}
+    league_response = requests.get(league_url, headers=headers)
+
+    if league_response.status_code != 200:
+        raise HTTPException(status_code=league_response.status_code, detail="리그 정보 조회 실패")
+
+    league_data = league_response.json()
+
+    # RANKED_SOLO_5x5 데이터 필터링
+    solo_rank_info = next((entry for entry in league_data if entry["queueType"] == "RANKED_SOLO_5x5"), None)
+    if not solo_rank_info:
+        raise HTTPException(status_code=404, detail="솔로 랭크 정보가 없습니다")
+    # 승/패 데이터 가져오기
+    wins = solo_rank_info["wins"]
+    losses = solo_rank_info["losses"]
+
+    # 승률 계산
+    total_games = wins + losses
+    win_rate = (wins / total_games * 100) if total_games > 0 else 0
+
+    return {
+        "status": 200,
+        "message": "유저 승/패 정보 및 승률 반환",
+        "data": {
+            "tier": solo_rank_info["tier"],
+            "rank": solo_rank_info["rank"],
+            "league_point": solo_rank_info["leaguePoints"],
+            "wins": wins,
+            "losses": losses,
+            "win_rate": f"{win_rate:.2f}%"  # 소수점 2자리로 표시
+        }
+    }
+
+@router.get("/get-matches")
+def get_recent_matches(
+    user_id: int = Query(..., description="유저의 user_id를 입력하세요")
+):
+    # user_id로 유저 정보 찾기
+    user = User.objects.filter(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다")
+
+    # puuid 가져오기
+    puuid = user.puuid
+    print(puuid)
+
+    # 최근 매치 데이터 가져오기
+    match_url = f"{BASE_URL}/lol/matches/v5/matches/by-puuid/{puuid}/ids?start=0&count=20"
+    headers = {"X-Riot-Token": RIOT_TEST_KEY}
+    match_response = requests.get(match_url, headers=headers)
+
+    if match_response.status_code != 200:
+        raise HTTPException(status_code=match_response.status_code, detail="매치 데이터 조회 실패")
+
+    match_ids = match_response.json()
+
+    if not match_ids:
+        raise HTTPException(status_code=404, detail="최근 매치가 없습니다")
+
+    return {
+        "status": 200,
+        "message": "최근 매치 목록 반환",
+        "data": match_ids
     }
