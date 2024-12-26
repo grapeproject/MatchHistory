@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from urllib import parse
 
 from backend.users.models import User
+from backend.match.models import Match, MatchParticipant
 import requests
 import os
 
@@ -13,7 +14,7 @@ load_dotenv()
 
 BASE_URL = os.getenv("BASE_URL")
 RIOT_TEST_KEY = os.getenv("RIOT_TEST_KEY")
-GET_PUUID_URL = os.getenv("GET_PUUID_URL")
+ASIA_API_RIOT_URI = os.getenv("ASIA_API_RIOT_URI")
 
 
 @router.get("/get-user")
@@ -25,7 +26,7 @@ def get_user_tier(
     encoded_name = parse.quote(user)
 
     # puuid 가져오기 요청
-    puuid_url = f"{GET_PUUID_URL}/{encoded_name}/{tag}"
+    puuid_url = f"{ASIA_API_RIOT_URI}/riot/account/v1/accounts/by-riot-id/{encoded_name}/{tag}"
     headers = {"X-Riot-Token": RIOT_TEST_KEY}
     puuid_response = requests.get(puuid_url, headers=headers)
 
@@ -118,21 +119,21 @@ def get_user_win_rate(
         }
     }
 
+
 @router.get("/get-matches")
-def get_recent_matches(
+def save_match_id(
     user_id: int = Query(..., description="유저의 user_id를 입력하세요")
 ):
-    # user_id로 유저 정보 찾기
+    # 1. 유저 정보 찾기
     user = User.objects.filter(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다")
 
-    # puuid 가져오기
+    # 2. puuid 가져오기
     puuid = user.puuid
-    print(puuid)
 
-    # 최근 매치 데이터 가져오기
-    match_url = f"{BASE_URL}/lol/matches/v5/matches/by-puuid/{puuid}/ids?start=0&count=20"
+    # 3. 최근 매치 데이터 가져오기 (하나의 매치만 가져오기 위해 count=1로 설정)
+    match_url = f"{ASIA_API_RIOT_URI}/lol/match/v5/matches/by-puuid/{puuid}/ids?type=ranked&start=0&count=1"
     headers = {"X-Riot-Token": RIOT_TEST_KEY}
     match_response = requests.get(match_url, headers=headers)
 
@@ -144,8 +145,23 @@ def get_recent_matches(
     if not match_ids:
         raise HTTPException(status_code=404, detail="최근 매치가 없습니다")
 
+    match_id = match_ids[0]  # 첫 번째 매치 ID만 가져오기
+
+    # 4. 매치 ID가 이미 DB에 존재하는지 확인
+    match = Match.objects.filter(match_id=match_id).first()
+    if match:
+        return {
+            "status": 200,
+            "message": "매치 아이디가 이미 저장되어 있습니다.",
+            "data": {"match_id": match.id}
+        }
+
+    # 5. 매치 ID를 DB에 저장
+    match = Match(match_id=match_id)
+    match.save()
+
     return {
         "status": 200,
-        "message": "최근 매치 목록 반환",
-        "data": match_ids
+        "message": "매치 아이디 저장 완료",
+        "data": {"match_id": match.id}
     }
